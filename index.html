@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CM-151 BLE Web</title>
+</head>
+<body>
+
+<h2>CM-151 BLE (Nordic UART)</h2>
+
+<button onclick="connect()">Connect</button>
+<button onclick="disconnect()">Disconnect</button>
+<button onclick="reconnect()">Reconnect</button>
+
+<br><br>
+
+<input type="text" id="msg" placeholder="보낼 메시지">
+<button onclick="send()">Send</button>
+
+<pre id="log"></pre>
+
+<script>
+let device;
+let server;
+let service;
+let txChar; // 쓰기
+let rxChar; // 읽기/notify
+
+const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const TX_CHAR = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // write
+const RX_CHAR = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // notify
+
+function log(text){
+  document.getElementById("log").textContent += text + "\n";
+}
+
+async function connect() {
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "CM-151" }],
+      optionalServices: [NUS_SERVICE]
+    });
+
+    server = await device.gatt.connect();
+    service = await server.getPrimaryService(NUS_SERVICE);
+
+    txChar = await service.getCharacteristic(TX_CHAR);
+    rxChar = await service.getCharacteristic(RX_CHAR);
+
+    await rxChar.startNotifications();
+    rxChar.addEventListener('characteristicvaluechanged', handleRX);
+
+    log("✅ Connected");
+  } catch (err) {
+    log("❌ Connect error: " + err);
+  }
+}
+
+function handleRX(event) {
+  let value = new TextDecoder().decode(event.target.value);
+  log("📥 RX: " + value);
+}
+
+async function send() {
+  try {
+    let text = document.getElementById("msg").value;
+    let data = new TextEncoder().encode(text);
+    await txChar.writeValue(data);
+    log("📤 TX: " + text);
+  } catch (err) {
+    log("❌ Send error: " + err);
+  }
+}
+
+function disconnect() {
+  if (device && device.gatt.connected) {
+    device.gatt.disconnect();
+    log("🔌 Disconnected");
+  }
+}
+
+async function reconnect() {
+  try {
+    if (device) {
+      if (device.gatt.connected) {
+        device.gatt.disconnect();
+      }
+      server = await device.gatt.connect();
+      log("🔄 Reconnected");
+    }
+  } catch (err) {
+    log("❌ Reconnect error: " + err);
+  }
+}
+</script>
+
+</body>
+</html>
